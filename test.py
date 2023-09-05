@@ -16,38 +16,45 @@ data_val = train_data[4000:, 1:]
 label_test = test_data[:, 0]
 data_test = test_data[:, 1:]
 
-def svm_train_primal(data_train, label_train, regularisation_para_C):
-    N, num_features = data_train.shape
-    w = cp.Variable(num_features)
-    b = cp.Variable()
-    xi = cp.Variable(N)
+def select_best_C(train_data, train_labels, val_data, val_labels):
+    """
+    Choose the best value of C using the validation set.
 
-    objective = cp.Minimize(0.5 * cp.norm(w,2)**2 + (regularisation_para_C / N) * cp.sum(xi))
-#     constraints = [label_train[i] * (w @ data_train[i] + b) >= 1 - xi[i] for i in range(N)]
-#     constraints += [xi[i] >= 0 for i in range(N)]
-    constraints = [cp.multiply(label_train, data_train @ w + b) >= 1 - xi, xi >= 0]
+    Parameters:
+    - train_data: Training data matrix
+    - train_labels: Training labels
+    - val_data: Validation data matrix
+    - val_labels: Validation labels
 
-    problem = cp.Problem(objective, constraints)
-    problem.solve()
+    Returns:
+    - best_C: Optimal value of C
+    - best_accuracy: Accuracy on the validation set using the best C
+    """
+    C_values = [2**i for i in range(-10, 11)]
+    best_accuracy = -0.1
+    best_C = None
+    
+    for C in C_values:
+        # Train SVM using the current value of C
+        svm_model = svm_train_primal(train_data, train_labels, C)
+        val_preds = svm_predict_primal(val_data, val_labels, svm_model)
+        
+        # Compute accuracy on the validation set
+        accuracy = np.mean(val_preds == val_labels)
+        
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_C = C
+            
+    return best_C, best_accuracy
 
-    svm_model = {'w': w.value, 'b': b.value}
-    print("sum of w:", np.sum(w.value))
-    print("b:", b.value)
-    return svm_model
+# Using the above function
+best_C, best_val_accuracy = select_best_C(train_data, train_labels, val_data, val_labels)
+print(f"Best C: {best_C}, Validation Accuracy: {best_val_accuracy * 100:.2f}%")
 
-def svm_predict_primal(data_test, label_test, svm_model):
-    w = svm_model['w']
-    b = svm_model['b']
-    predictions = np.sign(data_test @ w + b)
-    accuracy = np.mean(predictions == label_test)
-    return accuracy
+# Train the SVM using the best C and report test accuracy
+svm_model = svm_train_primal(train_data, train_labels, best_C)
 
-regularisation_para_C = 100
-svm_model = svm_train_primal(data_train, label_train, regularisation_para_C)
-test_accuracy = svm_predict_primal(data_test, label_test, svm_model)
-
-# w_sum = np.sum(svm_model['w'])
-
-# print("Solution of b:", svm_model['b'])
-# print("Sum of all dimensions of w solution:", w_sum)
-# print("Test accuracy:", test_accuracy)
+test_preds = svm_predict_primal(test_data, test_labels, svm_model)
+test_accuracy = np.mean(test_preds == test_labels)
+print(f"Test Accuracy using best C: {test_accuracy * 100:.2f}%")
